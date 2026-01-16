@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SecuWatch Lite - Cyber Audit</title>
+    <title>SecuWatch Pro - Cyber Audit</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -27,7 +27,7 @@
             padding: 20px;
         }
         h1 { margin-bottom: 10px; }
-        .container { width: 100%; max-width: 800px; }
+        .container { width: 100%; max-width: 900px; }
         
         .search-box {
             display: flex;
@@ -91,6 +91,9 @@
             border-radius: 12px;
             border: 1px solid var(--border);
         }
+        .full-width {
+            grid-column: span 2;
+        }
         .item {
             display: flex;
             justify-content: space-between;
@@ -99,6 +102,7 @@
         }
         .status-ok { color: var(--success); }
         .status-bad { color: var(--danger); }
+        .status-warn { color: var(--warning); }
         
         .loader { text-align: center; display: none; margin-top: 20px; }
 
@@ -118,8 +122,8 @@
 <body>
 
     <div class="container">
-        <h1 style="text-align: center;">🛡️ SecuWatch Lite</h1>
-        <p style="text-align: center; color: #94a3b8; margin-bottom: 40px;">Scanner de conformité SSL & HTTP Headers</p>
+        <h1 style="text-align: center;">🛡️ SecuWatch Pro</h1>
+        <p style="text-align: center; color: #94a3b8; margin-bottom: 40px;">Scanner de Vulnérabilités & OSINT</p>
 
         <div class="search-box">
             <input type="text" id="domainInput" placeholder="Entrez un domaine (ex: google.com)">
@@ -127,7 +131,7 @@
         </div>
 
         <div class="loader" id="loader">
-            ⏳ Analyse en cours... (Cela peut prendre 5-10 secondes)
+            ⏳ Analyse approfondie en cours (Ports & Config)...
         </div>
 
         <div id="results">
@@ -148,8 +152,13 @@
                 </div>
 
                 <div class="details-card">
-                    <h3>🛡️ Headers de Sécurité</h3>
+                    <h3>🛡️ Headers HTTP</h3>
                     <div id="headersContent"></div>
+                </div>
+
+                <div class="details-card full-width">
+                    <h3>🕵️‍♂️ Reconnaissance Réseau & OSINT</h3>
+                    <div id="networkContent"></div>
                 </div>
             </div>
         </div>
@@ -196,20 +205,33 @@
 
                 let sslHtml = `<div class="item"><span>Valide :</span> <span class="${data.ssl_status.valid ? 'status-ok' : 'status-bad'}">${data.ssl_status.valid ? 'OUI' : 'NON'}</span></div>`;
                 if(data.ssl_status.valid) {
-                    sslHtml += `<div class="item"><span>Jours restants :</span> <span>${data.ssl_status.days_left}</span></div>`;
-                    let issuer = data.ssl_status.issuer;
-                    if(issuer.length > 20) issuer = issuer.substring(0, 20) + '...';
-                    sslHtml += `<div class="item"><span>Émetteur :</span> <span style="font-size:0.8em">${issuer}</span></div>`;
+                    sslHtml += `<div class="item"><span>Expiration :</span> <span>J-${data.ssl_status.days_left}</span></div>`;
                 }
                 document.getElementById('sslContent').innerHTML = sslHtml;
 
                 let headersHtml = '';
                 for (const [key, value] of Object.entries(data.headers_status)) {
                     const isOk = value.includes("Présent");
-                    const cleanValue = isOk ? "✅ Activé" : "❌ Manquant";
+                    const cleanValue = isOk ? "✅ OK" : "❌";
                     headersHtml += `<div class="item"><span>${key}</span> <span class="${isOk ? 'status-ok' : 'status-bad'}">${cleanValue}</span></div>`;
                 }
                 document.getElementById('headersContent').innerHTML = headersHtml;
+
+                let networkHtml = '';
+                
+                const ports = data.open_ports;
+                if(ports.length > 0) {
+                    networkHtml += `<div class="item"><span>Ports Ouverts (Risque) :</span> <span class="status-bad">${ports.join(', ')}</span></div>`;
+                    networkHtml += `<div style="font-size:0.8em; color:#94a3b8; margin-top:5px;">⚠️ Les ports ouverts augmentent la surface d'attaque.</div>`;
+                } else {
+                    networkHtml += `<div class="item"><span>Ports Critiques :</span> <span class="status-ok">🛡️ Tous fermés/filtrés</span></div>`;
+                }
+
+                const secTxt = data.security_txt ? "✅ Trouvé" : "❌ Absent";
+                const secClass = data.security_txt ? "status-ok" : "status-warn";
+                networkHtml += `<div class="item" style="margin-top:10px;"><span>Fichier security.txt :</span> <span class="${secClass}">${secTxt}</span></div>`;
+
+                document.getElementById('networkContent').innerHTML = networkHtml;
 
                 loader.style.display = 'none';
                 results.style.display = 'block';
@@ -219,7 +241,7 @@
 
             } catch (error) {
                 console.error(error);
-                alert("Erreur API. Vérifie que le serveur tourne !");
+                alert("Erreur API ou Timeout. Le scan de ports peut prendre du temps.");
                 loader.style.display = 'none';
             }
         }
@@ -240,7 +262,7 @@
 
                 history.forEach(scan => {
                     const dateObj = new Date(scan.date);
-                    const dateStr = dateObj.toLocaleDateString('fr-FR') + ' ' + dateObj.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
+                    const dateStr = dateObj.toLocaleDateString('fr-FR');
                     
                     let color = '#ef4444';
                     if(scan.score > 70) color = '#22c55e';
@@ -250,13 +272,13 @@
                         <tr>
                             <td style="font-size: 0.9em; color: #94a3b8;">${dateStr}</td>
                             <td>${scan.domain}</td>
-                            <td style="font-weight: bold; color: ${color};">${scan.score}/100</td>
+                            <td style="font-weight: bold; color: ${color};">${scan.score}</td>
                         </tr>
                     `;
                     tbody.innerHTML += row;
                 });
             } catch (error) {
-                console.error("Impossible de charger l'historique", error);
+                console.error("Erreur historique", error);
             }
         }
 
