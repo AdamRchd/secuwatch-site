@@ -27,14 +27,34 @@
             padding: 20px;
         }
         h1 { margin-bottom: 10px; }
-        .container { width: 100%; max-width: 900px; }
+        .container { width: 100%; max-width: 900px; display: none; }
+        
+        /* Auth Screen */
+        .auth-container {
+            width: 100%; max-width: 400px;
+            background: var(--card-bg);
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+        .auth-input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: #0f172a;
+            color: white;
+            box-sizing: border-box;
+        }
         
         .search-box {
             display: flex;
             gap: 10px;
             margin-bottom: 30px;
         }
-        input {
+        input.scan-input {
             flex: 1;
             padding: 15px;
             border-radius: 8px;
@@ -64,6 +84,17 @@
             display: none; 
             border: 1px solid #ccc;
         }
+        
+        .btn-logout {
+            background: transparent;
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 8px 15px;
+            font-size: 14px;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
 
         #results { display: none; }
         
@@ -91,9 +122,7 @@
             border-radius: 12px;
             border: 1px solid var(--border);
         }
-        .full-width {
-            grid-column: span 2;
-        }
+        .full-width { grid-column: span 2; }
         .item {
             display: flex;
             justify-content: space-between;
@@ -121,17 +150,32 @@
 </head>
 <body>
 
-    <div class="container">
+    <div id="authScreen" class="auth-container">
+        <h1>🔐 SecuWatch Login</h1>
+        <p style="color: #94a3b8; margin-bottom: 20px;">Connectez-vous pour scanner et voir votre historique.</p>
+        
+        <input type="email" id="email" class="auth-input" placeholder="Email">
+        <input type="password" id="password" class="auth-input" placeholder="Mot de passe">
+        
+        <button onclick="login()" style="width:100%; margin-bottom: 10px;">Se Connecter</button>
+        <button onclick="register()" style="width:100%; background: var(--card-bg); border: 1px solid var(--accent); color: var(--accent);">Créer un compte</button>
+        
+        <p id="authMsg" style="margin-top: 15px; font-size: 0.9em;"></p>
+    </div>
+
+    <div id="appScreen" class="container">
+        <button onclick="logout()" class="btn-logout">Déconnexion</button>
+        
         <h1 style="text-align: center;">🛡️ SecuWatch Pro</h1>
         <p style="text-align: center; color: #94a3b8; margin-bottom: 40px;">Scanner de Vulnérabilités & OSINT</p>
 
         <div class="search-box">
-            <input type="text" id="domainInput" placeholder="Entrez un domaine (ex: google.com)">
+            <input type="text" id="domainInput" class="scan-input" placeholder="Entrez un domaine (ex: google.com)">
             <button onclick="launchScan()">Scanner</button>
         </div>
 
         <div class="loader" id="loader">
-            ⏳ Analyse approfondie en cours (Ports & Config)...
+            ⏳ Analyse approfondie en cours...
         </div>
 
         <div id="results">
@@ -150,21 +194,19 @@
                     <h3>🔒 Certificat SSL</h3>
                     <div id="sslContent"></div>
                 </div>
-
                 <div class="details-card">
                     <h3>🛡️ Headers HTTP</h3>
                     <div id="headersContent"></div>
                 </div>
-
                 <div class="details-card full-width">
-                    <h3>🕵️‍♂️ Reconnaissance Réseau & OSINT</h3>
+                    <h3>🕵️‍♂️ Reconnaissance Réseau</h3>
                     <div id="networkContent"></div>
                 </div>
             </div>
         </div>
 
         <div class="history-section">
-            <h3 style="margin-top: 0;">🕒 Derniers Scans</h3>
+            <h3 style="margin-top: 0;">🕒 Historique Personnel</h3>
             <table>
                 <thead>
                     <tr>
@@ -173,88 +215,141 @@
                         <th>Score</th>
                     </tr>
                 </thead>
-                <tbody id="historyTableBody">
-                </tbody>
+                <tbody id="historyTableBody"></tbody>
             </table>
         </div>
-
     </div>
 
     <script>
         const API_URL = "https://secuwatch-api.onrender.com"; 
 
+        function checkAuth() {
+            const token = localStorage.getItem('access_token');
+            if(token) {
+                document.getElementById('authScreen').style.display = 'none';
+                document.getElementById('appScreen').style.display = 'block';
+                loadHistory();
+            } else {
+                document.getElementById('authScreen').style.display = 'block';
+                document.getElementById('appScreen').style.display = 'none';
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const msg = document.getElementById('authMsg');
+
+            const formData = new URLSearchParams();
+            formData.append('username', email);
+            formData.append('password', password);
+
+            try {
+                const response = await fetch(`${API_URL}/token`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: formData
+                });
+                
+                if(!response.ok) throw new Error("Login failed");
+                
+                const data = await response.json();
+                localStorage.setItem('access_token', data.access_token);
+                checkAuth();
+            } catch (e) {
+                msg.innerText = "❌ Erreur de connexion";
+                msg.style.color = "red";
+            }
+        }
+
+        async function register() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const msg = document.getElementById('authMsg');
+
+            try {
+                const response = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, password})
+                });
+                
+                if(!response.ok) throw new Error("Erreur inscription");
+                
+                const data = await response.json();
+                localStorage.setItem('access_token', data.access_token);
+                checkAuth();
+            } catch (e) {
+                msg.innerText = "❌ Email déjà pris ou erreur";
+                msg.style.color = "red";
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('access_token');
+            checkAuth();
+        }
+
         async function launchScan() {
             const domain = document.getElementById('domainInput').value;
             const loader = document.getElementById('loader');
             const results = document.getElementById('results');
-            const btnReport = document.getElementById('btnReport');
+            const token = localStorage.getItem('access_token');
             
-            if(!domain) return alert("Veuillez entrer un domaine !");
+            if(!domain) return;
 
             results.style.display = 'none';
-            btnReport.style.display = 'none'; 
             loader.style.display = 'block';
 
             try {
-                const response = await fetch(`${API_URL}/scan?domain=${domain}`);
+                const response = await fetch(`${API_URL}/scan?domain=${domain}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if(response.status === 401) return logout();
+                
                 const data = await response.json();
 
-                const scoreDisplay = document.getElementById('scoreDisplay');
-                scoreDisplay.innerText = `${data.security_score}/100`;
-                scoreDisplay.style.color = data.security_score > 70 ? '#22c55e' : '#ef4444';
-
+                document.getElementById('scoreDisplay').innerText = `${data.security_score}/100`;
+                
                 let sslHtml = `<div class="item"><span>Valide :</span> <span class="${data.ssl_status.valid ? 'status-ok' : 'status-bad'}">${data.ssl_status.valid ? 'OUI' : 'NON'}</span></div>`;
-                if(data.ssl_status.valid) {
-                    sslHtml += `<div class="item"><span>Expiration :</span> <span>J-${data.ssl_status.days_left}</span></div>`;
-                }
                 document.getElementById('sslContent').innerHTML = sslHtml;
 
                 let headersHtml = '';
                 for (const [key, value] of Object.entries(data.headers_status)) {
                     const isOk = value.includes("Présent");
-                    const cleanValue = isOk ? "✅ OK" : "❌";
-                    headersHtml += `<div class="item"><span>${key}</span> <span class="${isOk ? 'status-ok' : 'status-bad'}">${cleanValue}</span></div>`;
+                    headersHtml += `<div class="item"><span>${key}</span> <span class="${isOk ? 'status-ok' : 'status-bad'}">${isOk ? "✅" : "❌"}</span></div>`;
                 }
                 document.getElementById('headersContent').innerHTML = headersHtml;
 
                 let networkHtml = '';
+                if(data.open_ports.length > 0) networkHtml += `<div class="item"><span class="status-bad">Ports: ${data.open_ports.join(', ')}</span></div>`;
+                else networkHtml += `<div class="item"><span class="status-ok">🛡️ Ports OK</span></div>`;
                 
-                const ports = data.open_ports;
-                if(ports.length > 0) {
-                    networkHtml += `<div class="item"><span>Ports Ouverts (Risque) :</span> <span class="status-bad">${ports.join(', ')}</span></div>`;
-                    networkHtml += `<div style="font-size:0.8em; color:#94a3b8; margin-top:5px;">⚠️ Les ports ouverts augmentent la surface d'attaque.</div>`;
-                } else {
-                    networkHtml += `<div class="item"><span>Ports Critiques :</span> <span class="status-ok">🛡️ Tous fermés/filtrés</span></div>`;
-                }
-
-                const secTxt = data.security_txt ? "✅ Trouvé" : "❌ Absent";
-                const secClass = data.security_txt ? "status-ok" : "status-warn";
-                networkHtml += `<div class="item" style="margin-top:10px;"><span>Fichier security.txt :</span> <span class="${secClass}">${secTxt}</span></div>`;
-
                 document.getElementById('networkContent').innerHTML = networkHtml;
 
                 loader.style.display = 'none';
                 results.style.display = 'block';
-                btnReport.style.display = 'inline-block';
-
+                document.getElementById('btnReport').style.display = 'inline-block';
                 loadHistory();
 
             } catch (error) {
                 console.error(error);
-                alert("Erreur API ou Timeout. Le scan de ports peut prendre du temps.");
                 loader.style.display = 'none';
             }
         }
 
         function downloadReport() {
             const domain = document.getElementById('domainInput').value;
-            if(!domain) return;
             window.open(`${API_URL}/report?domain=${domain}`, '_blank');
         }
 
         async function loadHistory() {
+            const token = localStorage.getItem('access_token');
             try {
-                const response = await fetch(`${API_URL}/history`);
+                const response = await fetch(`${API_URL}/history`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 const history = await response.json();
                 
                 const tbody = document.getElementById('historyTableBody');
@@ -262,17 +357,11 @@
 
                 history.forEach(scan => {
                     const dateObj = new Date(scan.date);
-                    const dateStr = dateObj.toLocaleDateString('fr-FR');
-                    
-                    let color = '#ef4444';
-                    if(scan.score > 70) color = '#22c55e';
-                    else if(scan.score > 50) color = '#eab308';
-
                     const row = `
                         <tr>
-                            <td style="font-size: 0.9em; color: #94a3b8;">${dateStr}</td>
+                            <td style="font-size: 0.9em; color: #94a3b8;">${dateObj.toLocaleDateString()}</td>
                             <td>${scan.domain}</td>
-                            <td style="font-weight: bold; color: ${color};">${scan.score}</td>
+                            <td style="font-weight: bold;">${scan.score}</td>
                         </tr>
                     `;
                     tbody.innerHTML += row;
@@ -282,7 +371,7 @@
             }
         }
 
-        loadHistory();
+        checkAuth();
     </script>
 </body>
 </html>
